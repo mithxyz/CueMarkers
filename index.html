@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Cue Points - Choreographer's Tool</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎵 Music Cue Points</h1>
+            <p>Add timecode cues to your music tracks for choreography and lighting</p>
+        </header>
+
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-content">
+                    <div class="upload-icon">📁</div>
+                    <h3>Upload Audio File</h3>
+                    <p>Drag and drop your audio file here or click to browse</p>
+                    <input type="file" id="audioFile" accept="audio/*" hidden>
+                    <button class="upload-btn" id="uploadBtn">
+                        Choose File
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="player-section" id="playerSection" style="display: none;">
+            <div class="audio-controls">
+                <audio id="audioPlayer" controls></audio>
+                <div class="time-display">
+                    <span id="currentTime">0:00</span> / <span id="duration">0:00</span>
+                </div>
+            </div>
+            
+            <div class="cue-controls">
+                <button id="addCueBtn" class="btn btn-primary">Add Cue at Current Time</button>
+                <button id="playFromStart" class="btn btn-secondary">Play from Start</button>
+                <button id="exportJson" class="btn btn-success">Export JSON</button>
+                <button id="exportCsv" class="btn btn-success">Export CSV</button>
+                <button id="importCues" class="btn btn-secondary">Import</button>
+            </div>
+        </div>
+
+        <div class="waveform-section" id="waveformSection" style="display: none;">
+            <div class="waveform-instructions">
+                <p><strong>Waveform Controls:</strong> Left-click to jump to time • Right-click to add marker • Red line shows current position • Drag markers to move them</p>
+                <details class="controls-help">
+                    <summary>Show Controls Guide</summary>
+                    <div class="controls-grid">
+                        <div>
+                            <h4>Mouse</h4>
+                            <ul>
+                                <li>Left click: Jump to time</li>
+                                <li>Right click: Add cue</li>
+                                <li>Drag background: Pan</li>
+                                <li>Drag cue: Move cue (shows time popup)</li>
+                                <li>Mouse wheel: Zoom in/out</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4>Keyboard</h4>
+                            <ul>
+                                <li>Space or K: Play/Pause</li>
+                                <li>← / →: Seek ±1s (Shift: ±5s, Alt: ±0.1s)</li>
+                                <li>, / .: Nudge −/+0.05s</li>
+                                <li>+ / − / 0: Zoom in/out/reset</li>
+                                <li>M: Add cue at current time</li>
+                                <li>[ / ]: Jump to previous/next cue</li>
+                            </ul>
+                        </div>
+                    </div>
+                </details>
+            </div>
+            <div class="zoom-controls">
+                <button id="zoomOut" class="btn btn-secondary">🔍-</button>
+                <span id="zoomLevel">100%</span>
+                <button id="zoomIn" class="btn btn-secondary">🔍+</button>
+                <button id="zoomReset" class="btn btn-secondary">Reset</button>
+                <span class="zoom-info">Mouse wheel to zoom • Drag to pan</span>
+            </div>
+            <div class="waveform-container">
+                <canvas id="waveformCanvas"></canvas>
+                <div class="cue-markers" id="cueMarkers"></div>
+                <div class="time-popup" id="timePopup" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="cues-panel" id="cuesPanel" style="display: none;">
+            <h3>Cue Points</h3>
+            <div class="cues-list" id="cuesList"></div>
+        </div>
+
+        <div class="modal" id="cueModal" style="display: none;">
+            <div class="modal-content">
+                <h3>Edit Cue Point</h3>
+                <div class="form-group">
+                    <label for="cueNumber">Cue #:</label>
+                    <input type="text" id="cueNumber" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="cueName">Title:</label>
+                    <input type="text" id="cueName" placeholder="Enter cue name">
+                </div>
+                <div class="form-group">
+                    <label for="cueTime">Time:</label>
+                    <input type="text" id="cueTime" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="cueDescription">Description:</label>
+                    <textarea id="cueDescription" placeholder="Optional description"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button id="saveCue" class="btn btn-primary">Save</button>
+                    <button id="deleteCue" class="btn btn-danger">Delete</button>
+                    <button id="cancelCue" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme" title="Toggle theme">🌙</button>
+    <script src="script.js"></script>
+</body>
+</html>
+

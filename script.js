@@ -28,8 +28,14 @@ class MusicCueApp {
             useFadeTimes: true,
             useMarkerColor: true,
             keepPlayheadInView: true,
-            ma3Id: 204,
-            ma3Trigger: 'Go+'
+            ma3Id: 101,
+            ma3Trigger: 'Go+',
+            ma3OverrideEnabled: false,
+            ma3OverrideId: 101,
+            ma3UseSeparateIds: false,
+            ma3SeqId: 101,
+            ma3TcId: 101,
+            ma3PageId: 101
         };
         
         this.wasPlayingBeforePopup = false;
@@ -351,6 +357,15 @@ class MusicCueApp {
         if (ma3IdEl) ma3IdEl.addEventListener('change', this.updateSetting.bind(this));
         const ma3TriggerEl = document.getElementById('ma3Trigger');
         if (ma3TriggerEl) ma3TriggerEl.addEventListener('change', this.updateSetting.bind(this));
+        const ma3OverrideEl = document.getElementById('ma3OverrideEnabled');
+        if (ma3OverrideEl) ma3OverrideEl.addEventListener('change', (e)=>{ this.updateSetting(e); this.applySettings(); });
+        const ma3OverrideIdEl = document.getElementById('ma3OverrideId');
+        if (ma3OverrideIdEl) ma3OverrideIdEl.addEventListener('change', this.updateSetting.bind(this));
+        const ma3UseSeparateIdsEl = document.getElementById('ma3UseSeparateIds');
+        if (ma3UseSeparateIdsEl) ma3UseSeparateIdsEl.addEventListener('change', (e)=>{ this.updateSetting(e); this.applySettings(); });
+        const seqEl = document.getElementById('ma3SeqId'); if (seqEl) seqEl.addEventListener('change', this.updateSetting.bind(this));
+        const tcEl = document.getElementById('ma3TcId'); if (tcEl) tcEl.addEventListener('change', this.updateSetting.bind(this));
+        const pageEl = document.getElementById('ma3PageId'); if (pageEl) pageEl.addEventListener('change', this.updateSetting.bind(this));
 
         // Initialize custom color dropdowns
         this.initColorDropdown('quickCueColorDropdown');
@@ -445,9 +460,25 @@ class MusicCueApp {
         
         // Apply MA3 settings
         const ma3IdEl = document.getElementById('ma3Id');
-        if (ma3IdEl) ma3IdEl.value = this.settings.ma3Id || 204;
+        if (ma3IdEl) ma3IdEl.value = this.settings.ma3Id || 101;
         const ma3TriggerEl = document.getElementById('ma3Trigger');
         if (ma3TriggerEl) ma3TriggerEl.value = this.settings.ma3Trigger || 'Go+';
+        const ma3OverrideEl = document.getElementById('ma3OverrideEnabled');
+        if (ma3OverrideEl) ma3OverrideEl.checked = !!this.settings.ma3OverrideEnabled;
+        const ma3OverrideBlock = document.getElementById('ma3OverrideBlock');
+        if (ma3OverrideBlock) ma3OverrideBlock.style.display = this.settings.ma3OverrideEnabled ? '' : 'none';
+        const ma3OverrideIdEl = document.getElementById('ma3OverrideId');
+        if (ma3OverrideIdEl) ma3OverrideIdEl.value = this.settings.ma3OverrideId || (this.settings.ma3Id || 101);
+        const ma3UseSeparateIdsEl = document.getElementById('ma3UseSeparateIds');
+        if (ma3UseSeparateIdsEl) ma3UseSeparateIdsEl.checked = !!this.settings.ma3UseSeparateIds;
+        const sepRow = document.getElementById('ma3SeparateIdsRow');
+        if (sepRow) sepRow.style.display = this.settings.ma3OverrideEnabled && this.settings.ma3UseSeparateIds ? 'flex' : 'none';
+        const seqEl = document.getElementById('ma3SeqId'); if (seqEl) seqEl.value = this.settings.ma3SeqId || this.settings.ma3OverrideId || this.settings.ma3Id || 101;
+        const tcEl = document.getElementById('ma3TcId'); if (tcEl) tcEl.value = this.settings.ma3TcId || this.settings.ma3OverrideId || this.settings.ma3Id || 101;
+        const pageEl = document.getElementById('ma3PageId'); if (pageEl) pageEl.value = this.settings.ma3PageId || this.settings.ma3OverrideId || this.settings.ma3Id || 101;
+
+        // Update visible project badge
+        this.updateProjectBadge();
         
         // Redraw waveform if settings changed
         if (this.waveformData || this.getDuration() > 0) {
@@ -461,7 +492,7 @@ class MusicCueApp {
         if (e.target.type === 'checkbox') {
             value = e.target.checked;
         } else if (e.target.type === 'number') {
-            value = Number(e.target.value) || 204;
+            value = Number(e.target.value) || 101;
         } else {
             value = e.target.value;
         }
@@ -469,6 +500,9 @@ class MusicCueApp {
         this.settings[setting] = value;
         this.saveSettings();
         this.applySettings();
+        if (setting === 'ma3Id' || setting === 'ma3OverrideEnabled' || setting === 'ma3OverrideId' || setting === 'ma3UseSeparateIds' || setting === 'ma3SeqId' || setting === 'ma3TcId' || setting === 'ma3PageId') {
+            this.updateProjectBadge();
+        }
     }
 
     showSettings() {
@@ -488,8 +522,14 @@ class MusicCueApp {
             useFadeTimes: true,
             useMarkerColor: true,
             keepPlayheadInView: true,
-            ma3Id: 204,
-            ma3Trigger: 'Go+'
+            ma3Id: 101,
+            ma3Trigger: 'Go+',
+            ma3OverrideEnabled: false,
+            ma3OverrideId: 101,
+            ma3UseSeparateIds: false,
+            ma3SeqId: 101,
+            ma3TcId: 101,
+            ma3PageId: 101
         };
         this.saveSettings();
         this.applySettings();
@@ -764,6 +804,9 @@ class MusicCueApp {
                 this.resizeCanvas();
                 this.drawWaveform();
             }, 100);
+
+            // Update badge after media is set
+            this.updateProjectBadge();
 
         } catch (error) {
             console.error('Error loading media file:', error);
@@ -1682,7 +1725,8 @@ class MusicCueApp {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         const base = this.mediaBasename || this.importedBasename || 'cues';
-        a.download = `${base}.json`;
+        const exportId = Math.max(1, Number(this.settings.ma3Id) || 101);
+        a.download = `${exportId}_${base}.json`;
         a.click();
     }
 
@@ -1696,16 +1740,18 @@ class MusicCueApp {
             .map((c, i) => ({
                 cueNo: i + 1,
                 label: this.sanitizeForCsv(c.name || 'Cue'),
-                timecode: this.formatTimecodeFrames(c.time, fps),
+                timecode: this.sanitizeForCsv(this.formatTimecodeFrames(c.time, fps)),
                 fade: Number(c.fade || 0)
             }));
         const headers = ['"Track"','"Type"','"Position"','"Cue No"','"Label"','"Fade"'];
-        const rows = sorted.map(r => `"${trackName}","${typeName}","${r.timecode}","${r.cueNo}","${r.label}","${r.fade}"`);
+        const cleanTrack = this.sanitizeForCsv(trackName);
+        const cleanType = this.sanitizeForCsv(typeName);
+        const rows = sorted.map(r => `"${cleanTrack}","${cleanType}","${r.timecode}","${r.cueNo}","${r.label}","${this.sanitizeForCsv(String(r.fade))}"`);
         const csv = [headers.join(','), ...rows].join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `${base}.csv`;
+        a.download = `${exportId}_${base}.csv`;
         a.click();
     }
 
@@ -1753,7 +1799,7 @@ class MusicCueApp {
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `${base}_spreadsheet.csv`;
+        a.download = `${exportId}_${base}_spreadsheet.csv`;
         a.click();
     }
 
@@ -1771,10 +1817,23 @@ class MusicCueApp {
         return colorMap[color] || 'Custom';
     }
 
+    updateProjectBadge() {
+        const badge = document.getElementById('projectBadge');
+        const idEl = document.getElementById('badgeId');
+        const trackEl = document.getElementById('badgeTrack');
+        if (!badge || !idEl || !trackEl) return;
+        const id = Math.max(1, Number(this.settings?.ma3Id) || 101);
+        const base = this.mediaBasename || this.importedBasename || 'cues';
+        idEl.textContent = `ID ${id}`;
+        trackEl.textContent = base;
+        badge.style.display = '';
+    }
+
     exportCuesMarkdown() {
         const base = this.mediaBasename || this.importedBasename || 'cues';
+        const exportId = Math.max(1, Number(this.settings.ma3Id) || 101);
         const lines = [];
-        lines.push(`# ${base} - Cue List`);
+        lines.push(`# ${exportId}_${base} - Cue List`);
         lines.push('');
         lines.push('| # | Title | Time | Fade (s) | Description |');
         lines.push('|---:|---|---:|---:|---|');
@@ -1791,12 +1850,13 @@ class MusicCueApp {
         const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `${base}.md`;
+        a.download = `${exportId}_${base}.md`;
         a.click();
     }
 
     exportCuesPdf() {
         const base = this.mediaBasename || this.importedBasename || 'cues';
+        const exportId = Math.max(1, Number(this.settings.ma3Id) || 101);
         const sorted = [...this.cues].sort((a,b) => a.time - b.time);
         const rowsHtml = sorted.map((c, i) => {
             const num = i + 1;
@@ -1806,7 +1866,7 @@ class MusicCueApp {
             const desc = (c.description || '').replace(/&/g,'&amp;').replace(/</g,'&lt;');
             return `<tr><td class=\"num\">${num}</td><td class=\"title\">${title}</td><td class=\"time\">${time}</td><td class=\"fade\">${fade}</td><td class=\"desc\">${desc}</td></tr>`;
         }).join('');
-        const html = `<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>${base} - Cue List</title>
+        const html = `<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>${exportId}_${base} - Cue List</title>
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827;margin:24px;}
 h1{font-size:20px;margin:0 0 16px 0;}
@@ -1819,7 +1879,7 @@ h1{font-size:20px;margin:0 0 16px 0;}
 @media print{.noprint{display:none}}
 </style>
 </head><body>
-<h1>${base} - Cue List</h1>
+<h1>${exportId}_${base} - Cue List</h1>
 <table class=\"table\"><thead><tr><th>#</th><th>Title</th><th>Time</th><th>Fade (s)</th><th>Description</th></tr></thead>
 <tbody>${rowsHtml}</tbody></table>
 <div class=\"footer\">Generated ${new Date().toLocaleString()}</div>
@@ -1842,7 +1902,14 @@ h1{font-size:20px;margin:0 0 16px 0;}
             return null;
         }
 
-        const id = Math.max(1, Number(this.settings.ma3Id) || 204);
+        // Determine IDs
+        const exportId = Math.max(1, Number(this.settings.ma3Id) || 101);
+        const override = !!this.settings.ma3OverrideEnabled;
+        const useSeparate = !!this.settings.ma3UseSeparateIds;
+        const singleOverrideId = Math.max(1, Number(this.settings.ma3OverrideId) || exportId);
+        const seqId = override ? (useSeparate ? Math.max(1, Number(this.settings.ma3SeqId) || singleOverrideId) : singleOverrideId) : exportId;
+        const tcId = override ? (useSeparate ? Math.max(1, Number(this.settings.ma3TcId) || singleOverrideId) : singleOverrideId) : exportId;
+        const pageId = override ? (useSeparate ? Math.max(1, Number(this.settings.ma3PageId) || singleOverrideId) : singleOverrideId) : exportId;
         const trigger = this.settings.ma3Trigger || 'Go+';
 
         // Helpers
@@ -1862,7 +1929,7 @@ h1{font-size:20px;margin:0 0 16px 0;}
             .replaceAll(':', 't')
             .slice(0, 19);
         const dpName = `Markers${nowTag}`; // temporary datapool
-        const macroName = `${id}_${base}`;
+        const macroName = `${exportId}_${base}`;
 
         const lines = [];
         lines.push('<?xml version="1.0" encoding="UTF-8"?>');
@@ -1899,33 +1966,33 @@ h1{font-size:20px;margin:0 0 16px 0;}
         // Create sequence and first pass of cues
         for (let i = 0; i < sorted.length; i++) {
             const cueNo = i + 1;
-            lines.push(`    <MacroLine Command=${q(`Store DataPool "${dpName}" Sequence ${id} Cue ${cueNo} /Merge`)}/>`);
+            lines.push(`    <MacroLine Command=${q(`Store DataPool "${dpName}" Sequence ${seqId} Cue ${cueNo} /Merge`)}/>`);
             const fade = Math.max(0, Number(sorted[i].fade || 0));
-            lines.push(`    <MacroLine Command=${q(`DataPool "${dpName}" Sequence ${id} Cue ${cueNo} CueFade ${fade}`)}/>`);
+            lines.push(`    <MacroLine Command=${q(`DataPool "${dpName}" Sequence ${seqId} Cue ${cueNo} CueFade ${fade}`)}/>`);
             const hex = (sorted[i].markerColor || '').toLowerCase();
             const app = hex ? colorAppName(hex) : 'Cue Point Lighting';
-            lines.push(`    <MacroLine Command=${q(`Set DataPool "${dpName}" Sequence ${id} Cue ${cueNo} Property APPEARANCE "${app}"`)}/>`);
+            lines.push(`    <MacroLine Command=${q(`Set DataPool "${dpName}" Sequence ${seqId} Cue ${cueNo} Property APPEARANCE "${app}"`)}/>`);
         }
-        lines.push(`    <MacroLine Command=${q(`Set  DataPool "${dpName}" Sequence ${id} Property APPEARANCE "Cue Point Lighting"`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`Set  DataPool "${dpName}" Sequence ${seqId} Property APPEARANCE "Cue Point Lighting"`)}/>`);
 
         // Timecode object
         lines.push(`    <MacroLine Command=${q('cd root')}/>`);
-        lines.push(`    <MacroLine Command=${q(`Store DataPool "${dpName}" Timecode ${id}`)}/>`);
-        lines.push(`    <MacroLine Command=${q(`cd DataPool "${dpName}" Timecode ${id}`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`Store DataPool "${dpName}" Timecode ${tcId}`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`cd DataPool "${dpName}" Timecode ${tcId}`)}/>`);
         lines.push(`    <MacroLine Command=${q('Store 1 "Markers"')}/>`);
         lines.push(`    <MacroLine Command=${q('cd 1')}/>`);
         lines.push(`    <MacroLine Command=${q('cd root')}/>`);
         lines.push(`    <MacroLine Command=${q(`cd DataPool "${dpName}"`)}/>`);
         lines.push(`    <MacroLine Command=${q('cd "Timecodes"')}/>`);
-        lines.push(`    <MacroLine Command=${q(`set ${id} Property FRAMEREADOUT "${fps} fps"`)}/>`);
-        lines.push(`    <MacroLine Command=${q(`set ${id} Property OFFSETTCSLOT "0"`)}/>`);
-        lines.push(`    <MacroLine Command=${q(`set ${id} Property DURATION "${t3(duration)}"`)}/>`);
-        lines.push(`    <MacroLine Command=${q(`set ${id} Property IGNOREFOLLOW "1"`)}/>`);
-        lines.push(`    <MacroLine Command=${q(`set ${id} Property PLAYBACKANDRECORD "Manual Events"`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`set ${tcId} Property FRAMEREADOUT "${fps} fps"`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`set ${tcId} Property OFFSETTCSLOT "0"`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`set ${tcId} Property DURATION "${t3(duration)}"`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`set ${tcId} Property IGNOREFOLLOW "1"`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`set ${tcId} Property PLAYBACKANDRECORD "Manual Events"`)}/>`);
         lines.push(`    <MacroLine Command=${q('cd root')}/>`);
-        lines.push(`    <MacroLine Command=${q(`cd DataPool "${dpName}" Timecode ${id}`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`cd DataPool "${dpName}" Timecode ${tcId}`)}/>`);
         lines.push(`    <MacroLine Command=${q('cd 1')}/>`);
-        lines.push(`    <MacroLine Command=${q(`Assign DataPool "${dpName}" Sequence ${id} At 1`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`Assign DataPool "${dpName}" Sequence ${seqId} At 1`)}/>`);
         lines.push(`    <MacroLine Command=${q('cd 1')}/>`);
         lines.push(`    <MacroLine Command=${q('cd 1')}/>`);
         lines.push(`    <MacroLine Command=${q('Store Type "CmdSubTrack" 1')}/>`);
@@ -1944,29 +2011,29 @@ h1{font-size:20px;margin:0 0 16px 0;}
         lines.push(`    <MacroLine Command=${q(`cd DataPool "${dpName}"`)}/>`);
         for (let i = 0; i < sorted.length; i++) {
             const n = i + 1;
-            lines.push(`    <MacroLine Command=${q(`Assign DataPool ${dpName} Sequence  ${id} Cue ${n} At Timecode ${id}.1.1.1.1.${n}`)}/>`);
+            lines.push(`    <MacroLine Command=${q(`Assign DataPool ${dpName} Sequence  ${seqId} Cue ${n} At Timecode ${tcId}.1.1.1.1.${n}`)}/>`);
         }
 
         // Page and labels/notes
         lines.push(`    <MacroLine Command=${q('cd root')} Wait="0.01"/>`);
-        lines.push(`    <MacroLine Command=${q(`Store Page ${id}`)}/>`);
-        lines.push(`    <MacroLine Command=${q(`Assign DataPool "${dpName}" Sequence ${id} At Page ${id}.101`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`Store Page ${pageId}`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`Assign DataPool "${dpName}" Sequence ${seqId} At Page ${pageId}.101`)}/>`);
         for (let i = 0; i < sorted.length; i++) {
             const n = i + 1;
             const title = sorted[i].name || `Cue ${n}`;
             const notes = sorted[i].description || '';
-            lines.push(`    <MacroLine Command=${q(`Label DataPool "${dpName}" Sequence ${id} Cue ${n} "${title}"`)}/>`);
+            lines.push(`    <MacroLine Command=${q(`Label DataPool "${dpName}" Sequence ${seqId} Cue ${n} "${title}"`)}/>`);
             if (notes) {
-                lines.push(`    <MacroLine Command=${q(`Set DataPool "${dpName}" Sequence ${id} Cue ${n} Property "note" "${notes}"`)}/>`);
+                lines.push(`    <MacroLine Command=${q(`Set DataPool "${dpName}" Sequence ${seqId} Cue ${n} Property "note" "${notes}"`)}/>`);
             }
         }
-        lines.push(`    <MacroLine Command=${q(`Label DataPool "${dpName}" Sequence ${id} "Lighting ${id}"`)}/>`);
-        lines.push(`    <MacroLine Command=${q(`Label DataPool "${dpName}" Timecode ${id} "${base}"`)}/>`);
-        lines.push(`    <MacroLine Command=${q(`Label Page ${id} "${base}"`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`Label DataPool "${dpName}" Sequence ${seqId} "Lighting ${seqId}"`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`Label DataPool "${dpName}" Timecode ${tcId} "${base}"`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`Label Page ${pageId} "${base}"`)}/>`);
 
         // Cleanup: move to main pool number and delete temp datapool
-        lines.push(`    <MacroLine Command=${q(`Move DataPool "${dpName}" Sequence 1 Thru At Sequence ${id}`)}/>`);
-        lines.push(`    <MacroLine Command=${q(`Move DataPool "${dpName}" Timecode 1 Thru At Timecode ${id}`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`Move DataPool "${dpName}" Sequence 1 Thru At Sequence ${seqId}`)}/>`);
+        lines.push(`    <MacroLine Command=${q(`Move DataPool "${dpName}" Timecode 1 Thru At Timecode ${tcId}`)}/>`);
         lines.push(`    <MacroLine Command=${q(`Delete DataPool "${dpName}" /NoConfirm`)}/>`);
 
         lines.push('  </Macro>');
@@ -1977,16 +2044,16 @@ h1{font-size:20px;margin:0 0 16px 0;}
 
     exportMa3MacroXml() {
         const base = this.mediaBasename || this.importedBasename || 'cues';
+        const exportId = Math.max(1, Number(this.settings.ma3Id) || 101);
         const xml = this.generateMa3MacroXml();
         if (!xml) {
             alert('No cues to export.');
             return;
         }
-        const id = Math.max(1, Number(this.settings.ma3Id) || 204);
         const blob = new Blob([xml], { type: 'application/xml;charset=utf-8' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `${base}_${id}macro.xml`;
+        a.download = `${exportId}_${base}_macro.xml`;
         a.click();
     }
 
@@ -2114,6 +2181,7 @@ h1{font-size:20px;margin:0 0 16px 0;}
         this.renumberCues();
         this.updateCuesList();
         this.drawWaveform();
+        this.updateProjectBadge();
     }
 
     importFromCsv(csvText) {
@@ -2260,6 +2328,7 @@ h1{font-size:20px;margin:0 0 16px 0;}
             }
             const zip = new JSZip();
             const base = this.mediaBasename || this.importedBasename || 'cues';
+            const exportId = Math.max(1, Number(this.settings.ma3Id) || 101);
             // media
             if (this.uploadedFile) {
                 const mediaFolder = zip.folder('media');
@@ -2280,18 +2349,20 @@ h1{font-size:20px;margin:0 0 16px 0;}
                 })),
                 settings: this.settings
             };
-            zip.file(`${base}.json`, JSON.stringify(jsonData, null, 2));
+            zip.file(`${exportId}_${base}.json`, JSON.stringify(jsonData, null, 2));
             // cues.csv (CuesExample format)
             const fps = 30;
             const headers = ['"Track"','"Type"','"Position"','"Cue No"','"Label"','"Fade"'];
             const trackName = base;
             const typeName = 'Lighting';
+            const cleanTrack = this.sanitizeForCsv(trackName);
+            const cleanType = this.sanitizeForCsv(typeName);
             const rows = this.cues
                 .slice()
                 .sort((a,b)=>a.time-b.time)
-                .map((c,i)=>`"${trackName}","${typeName}","${this.formatTimecodeFrames(c.time,fps)}","${i+1}","${this.sanitizeForCsv(c.name||'Cue')}","${Number(c.fade||0)}"`);
+                .map((c,i)=>`"${cleanTrack}","${cleanType}","${this.sanitizeForCsv(this.formatTimecodeFrames(c.time,fps))}","${i+1}","${this.sanitizeForCsv(c.name||'Cue')}","${this.sanitizeForCsv(String(Number(c.fade||0)))}"`);
             const csv = [headers.join(','), ...rows].join('\n');
-            zip.file(`${base}.csv`, csv);
+            zip.file(`${exportId}_${base}.csv`, csv);
             
             // cues_spreadsheet.csv (detailed version)
             const sorted = [...this.cues]
@@ -2322,34 +2393,33 @@ h1{font-size:20px;margin:0 0 16px 0;}
             
             const spreadsheetRows = sorted.map(r => [
                 r.cueNo,
-                r.name,
-                r.description,
-                r.time.toFixed(3),
-                r.timeFormatted,
-                r.timecode,
-                r.fade,
-                r.markerColor,
-                r.colorName
+                this.sanitizeForCsv(r.name),
+                this.sanitizeForCsv(r.description),
+                this.sanitizeForCsv(r.time.toFixed(3)),
+                this.sanitizeForCsv(r.timeFormatted),
+                this.sanitizeForCsv(r.timecode),
+                this.sanitizeForCsv(String(r.fade)),
+                this.sanitizeForCsv(r.markerColor),
+                this.sanitizeForCsv(r.colorName)
             ]);
             
             const spreadsheetCsv = [spreadsheetHeaders.join(','), ...spreadsheetRows.map(row => row.map(cell => `"${cell}"`).join(','))].join('\n');
-            zip.file(`${base}_spreadsheet.csv`, spreadsheetCsv);
+            zip.file(`${exportId}_${base}_spreadsheet.csv`, spreadsheetCsv);
             
             // MA3 macro XML
-            const id = Math.max(1, Number(this.settings.ma3Id) || 204);
             const ma3Xml = this.generateMa3MacroXml();
             if (ma3Xml) {
-                zip.file(`${base}_${id}macro.xml`, ma3Xml);
+                zip.file(`${exportId}_${base}_macro.xml`, ma3Xml);
             }
             
             // readme
-            const readme = `# ${base}\n\nBundle contains:\n- media/${this.uploadedFile ? this.uploadedFile.name : '(no media saved)'}\n- ${base}.json\n- ${base}.csv\n- ${base}_spreadsheet.csv (Detailed format)\n- ${base}_${id}macro.xml (MA3 Macro)\n\nGenerated: ${new Date().toLocaleString()}\n`;
+            const readme = `# ${exportId}_${base}\n\nBundle contains:\n- media/${this.uploadedFile ? this.uploadedFile.name : '(no media saved)'}\n- ${exportId}_${base}.json\n- ${exportId}_${base}.csv\n- ${exportId}_${base}_spreadsheet.csv (Detailed format)\n- ${exportId}_${base}_macro.xml (MA3 Macro)\n\nGenerated: ${new Date().toLocaleString()}\n`;
             zip.file('README.md', readme);
             // generate
             const blob = await zip.generateAsync({ type: 'blob' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `${base}.zip`;
+            a.download = `${exportId}_${base}.zip`;
             a.click();
         } catch (err) {
             console.error('ZIP export failed', err);

@@ -34,19 +34,46 @@ Server runs on http://localhost:3000 by default. Copy `.env.example` to `.env` b
 
 ### Backend (server/)
 - **Express + Socket.IO**: REST API for CRUD operations, WebSocket for real-time collaboration
-- **PostgreSQL + Knex**: Database with migration-based schema in `server/db/migrations/`
-- **S3/MinIO**: Media file storage via AWS SDK
-- **Session auth**: Passport.js with PostgreSQL session store
+- **PostgreSQL + Knex**: Database with 6 migrations (users, projects, project_members, tracks, cues, project_settings)
+- **S3/MinIO**: Media file storage via AWS SDK v3
+- **Session auth**: express-session + Passport.js, shared with Socket.IO for authenticated events
 
-API routes follow pattern `/api/v1/<resource>`. Socket events handle real-time cue/track operations and cursor sync.
+**Key routes** (`/api/v1`):
+- `/auth/register`, `/login`, `/logout`, `/me`
+- `/projects` (CRUD)
+- `/projects/:id/members` (invite, role management)
+- `/projects/:id/tracks` (CRUD, upload media, presigned URLs)
+- `/projects/:id/tracks/:trackId/cues` (CRUD, batch import)
+- `/projects/:id/settings` (get/update JSONB)
+- `/projects/:id/export/{json|csv|markdown|ma3-xml|zip}` (server-side generation)
+
+**Socket handlers** (in `server/socket/handlers.js`):
+- `join-project`: Emits full `project:state` (project, tracks, cues, settings, members, online users)
+- Real-time mutations: `cue:*`, `track:*`, `settings:update`
+- Presence: `member:joined`, `member:left`, `cursor:update`
+
+**Conflict Resolution**: Last-write-wins. Field-level merging (name + time on same cue both apply). Delete wins over edit.
 
 ### Frontend (client/)
-- **Vanilla JS SPA**: Hash-based routing (`#/login`, `#/projects`, `#/projects/:id`)
-- **Global singletons**: `window.cmApi`, `window.cmSocket`, `window.cmState`
-- **Views**: Auth, Projects list, Editor (waveform + cue list)
+- **Vanilla JS SPA**: Hash router with 3 views
+- **Global singletons**: `window.cmApi` (HTTP), `window.cmSocket` (WebSocket), `window.cmState` (reactive state)
+- **Views**:
+  - `AuthView`: Login/register forms
+  - `ProjectsView`: Dashboard with create/share/delete project cards
+  - `EditorView`: Main editor wrapping `MusicCueApp` class, handles track tabs, media upload, S3 integration, real-time sync
+
+**Editor integration** (`client/js/views/editor.js`):
+- Instantiates `MusicCueApp` from `script.js`
+- Overrides key methods to sync with server:
+  - `loadMediaFile()` → Multer upload → S3 → presigned URL
+  - `saveQuickCue()` → socket emit `cue:create`
+  - `saveCue()` → socket emit `cue:update`
+  - `deleteCue()` → socket emit `cue:delete`
+  - `saveSettings()` → socket emit `settings:update`
+- Listens for socket events and reconciles remote changes into local `MusicCueApp` instance
 
 ### Legacy Files (root)
-The original single-page version exists at root (`index.html`, `script.js`, `styles.css`). The `client/` folder contains the multi-user version.
+Original single-user app at root (`index.html`, `script.js`, `styles.css`). The `client/` folder overrides these via SPA routing. `script.js` has conditional auto-init: skips if `#app-root` exists.
 
 ### Data Model
 ```
@@ -54,12 +81,15 @@ users -> project_members -> projects -> tracks -> cues
                                     -> project_settings
 ```
 
-Project members have roles: `owner`, `editor`, `viewer`. Viewers cannot modify cues/tracks.
+**Roles**: `owner` (full access, can delete/invite), `editor` (create/edit cues/tracks), `viewer` (read-only). All role checks in routes + socket handlers.
 
-### Socket Events
-Real-time sync uses room-based broadcasting (`project:<id>`). Key events:
-- `join-project` / `leave-project`: Room management
-- `cue:create/update/delete/move`: Cue operations
-- `track:create/update/delete`: Track operations
-- `settings:update`: Project settings sync
-- `cursor:position`: Collaborative cursor display
+### Media Storage
+Tracks store `media_s3_key` + `media_s3_filename`. `GET /projects/:id/tracks/:trackId/media` returns presigned URL (1-hour expiry). Client loads directly from URL.
+
+### WebSocket Flow
+1. Client calls `cmSocket.connect()` after auth
+2. On project open, emits `join-project` → server auth-checks membership
+3. Server broadcasts `project:state` with full state
+4. Client mutations emit socket events (debounced for drag, instant for others)
+5. Server broadcasts changes to all room members
+6. Optimistic updates on client; server events confirm or reconcile

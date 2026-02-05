@@ -2459,20 +2459,27 @@ h1{font-size:20px;margin:0 0 16px 0;}
 }
 
 // Initialize the app when the page loads
+// Skip auto-init if served through the new collaborative app (has #app-root)
 let app;
 document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('app-root')) {
+        // New collaborative app: EditorView handles MusicCueApp instantiation
+        console.log('Collaborative mode: MusicCueApp class loaded, waiting for EditorView.');
+        return;
+    }
+
     console.log('DOM loaded, initializing app...');
-    
+
     // Add a visual indicator that the app is loading
     const uploadArea = document.getElementById('uploadArea');
     if (uploadArea) {
         uploadArea.style.border = '3px dashed #4CAF50';
         uploadArea.style.background = 'rgba(76, 175, 80, 0.1)';
     }
-    
+
     app = new MusicCueApp();
     console.log('App initialized:', app);
-    
+
     // Change border back to normal after initialization
     if (uploadArea) {
         setTimeout(() => {
